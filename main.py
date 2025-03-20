@@ -1,6 +1,6 @@
 import os
-from agents.code_agent import CodeAgent
-from users.user_manager import UserManager
+from core.agents.code_agent import CodeAgent
+from database.user_manager import UserManager
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.panel import Panel

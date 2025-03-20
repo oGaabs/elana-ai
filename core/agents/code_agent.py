@@ -1,6 +1,6 @@
 import requests
-from execution.code_executor import CodeExecutor
-from reasoning.thinker import Thinker
+from core.execution.code_executor import CodeExecutor
+from core.reasoning.thinker import Thinker
 
 class CodeAgent:
     def __init__(self, api_url="http://localhost:11434/api/generate", model="codellama"):
