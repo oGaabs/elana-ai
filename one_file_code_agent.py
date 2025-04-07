@@ -257,8 +257,8 @@ class CodeAgent:
             
         # Step 2: Automatic Reasoning and Tool-use (ART) with Tool Calling
         # Use Python model for Python-specific code generation
-        console.print(Text("Step 2: Generating Changes", style="bold underline"))
-        tool_prompt = f"""
+        console.print(Text("Step 2: Generating Solution", style="bold underline"))
+        solution_prompt = f"""
         Given the project context:
         {self.context}
         Given the prompt: "{prompt}"
@@ -267,48 +267,77 @@ class CodeAgent:
         Given the Code Agent AI reasoning and planning:
         {reflection["thinking"]}
 
-        Implement the changes only using this command:
-        CREATE: <path> - Create a new file with content
-        <content>
-        MODIFY: <path> - Modify an existing file with new content
-        <content>
+        You are an expert software engineer that writes simple, concise code and explanations.
+        Generate a complete solution with:
+        1. Step-by-step reasoning about how to implement the changes
+        2. The actual code implementation, with the code blocks (```) and final code, not a example of code.
+        3. Any necessary imports or dependencies
+
+        Provide your reasoning with "Thinking:" prefix and solution with "Final:" prefix.
+        """
+
+        MAX_ATTEMPTS = 3
+        solution = None
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                solution = self._call_ollama(solution_prompt, INSTRUCT_MODEL)
+                console.print(Panel("\n".join(solution["thinking"]), title="Solution Reasoning", style="cyan"))
+                console.print(Panel("\n".join(solution["text"]), title="Generated Solution", style="green"))
+                logger.info("Solution generated successfully")
+                break
+            except Exception as e:
+                logger.error("Attempt %d failed: %s", attempt, e)
+                if attempt == MAX_ATTEMPTS:
+                    logger.critical("Max attempts reached. Failing gracefully.")
+                    console.print(Panel("Failed to generate solution. Reflecting to a new prompt.", style="bold red"))
+                    return
+
+        # Convert solution to tool calls
+        console.print(Text("Step 3: Converting to Tool Calls", style="bold underline"))
+        tool_prompt = f"""
+        Given this solution:
+        {solution["text"]}
+
+        Convert the solution into tool calls using Automatic Reasoning and Tool-use (ART).
+        Use only these commands:
+        CREATE: <path> - Create a new file
+        MODIFY: <path> - Modify an existing file
         DELETE: <path> - Delete a file
-        <content>
 
         {few_shot_examples}
 
         Instructions:
-        1. Reason step-by-step about what changes to make with "Thinking:" prefix.
-        2. Output only the tool calls with "Final:" prefix, strictly adhering to this format:
+        1. Analyze the solution and determine required file changes
+        2. Convert each change into appropriate tool calls
+        3. Format output exactly as:
            CREATE: path/to/file
            <content>
            MODIFY: path/to/file
            <content>
            DELETE: path/to/file
-        3. Do not include explanations, code blocks (```), or additional text outside the tool call format in the "Final:" section.
-        4. Ensure each tool call is complete with path and content (if applicable).
-        5. Write simple, concise Python code as an expert programmer.
+        4. No explanations or code blocks outside tool calls
+        5. Ensure paths and content are complete
 
-        Proceed with reasoning and then provide the exact tool calls.
+        Provide reasoning with "Thinking:" prefix and tool calls with "Final:" prefix.
         """
-        MAX_ATTEMPTS = 3
+
         execution = None
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
                 execution = self._call_ollama(tool_prompt, INSTRUCT_MODEL)
-                console.print(Panel("\n".join(execution["thinking"]), title="Reasoning", style="cyan"))
+                console.print(Panel("\n".join(execution["thinking"]), title="Tool Call Reasoning", style="cyan"))
                 console.print(Panel("\n".join(execution["text"]), title="Tool Calls", style="magenta"))
                 logger.info("Tool calls generated: %s", "\n".join(execution["text"]))
                 
-                # Step 3: Execute Tool Calls
+                # Execute Tool Calls
                 tool_calls = self._parse_tool_calls(execution["text"])
                 self._execute_tool_calls(tool_calls)
-                break  # Sai do loop se não houver erro
+                break
             except Exception as e:
                 logger.error("Attempt %d failed: %s", attempt, e)
                 if attempt == MAX_ATTEMPTS:
                     logger.critical("Max attempts reached. Failing gracefully.")
-                    console.print(Panel("Failed to Tool Calling. Reflecting to a new prompt.", style="bold red"))
+                    console.print(Panel("Failed to convert to tool calls. Reflecting to a new prompt.", style="bold red"))
             
 
 
